@@ -10,20 +10,69 @@ use CodeIgniter\HTTP\{
     ResponseInterface
 };
 
+use Firebase\JWT\{
+    JWT,
+    Key
+};
+
 use CodeIgniter\API\ResponseTrait;
 
 class AuthFilter implements FilterInterface {
     use ResponseTrait;
 
     public function before(RequestInterface $request, $arguments = null) {
-        $authHeader = $request->getHeaderLine('Authorization');
+        $uri = service('uri');
+        $method = $uri->getSegment(2);
 
-        if (!$authHeader || !$this->validateToken($token)) {
-            return Services::response()->setStatusCode(ResponseInterface::HTTP_UNAUTHORIZED, 'Unauthorized or token expired');
+        $unchecked_methods = ['generateToken', 'swagger'];
+        if(in_array($method, $unchecked_methods)) {
+            return;
         }
 
-        $tokenData = $this->generateToken();
+        $authHeader = $request->getHeaderLine('Authorization');
 
+        if($authHeader == false) {
+            return Services::response()
+            ->setStatusCode(ResponseInterface::HTTP_UNAUTHORIZED)
+            ->setHeader('Content-Type', 'application/json')
+            ->setBody(json_encode([
+                "status" => 401,
+                "error" => 401,
+                'message' => [
+                    "error" => 'Header 정보가 누락되었습니다.'
+                ]
+            ]));
+        }
+        
+        try {
+            $accessToken = explode(" ", $authHeader)[1] ?? null;
+            if (strlen($accessToken) < 1) {
+                return Services::response()
+                ->setStatusCode(ResponseInterface::HTTP_UNAUTHORIZED)
+                ->setHeader('Content-Type', 'application/json')
+                ->setBody(json_encode([
+                    "status" => 401,
+                    "error" => 401,
+                    'message' => [
+                        "error" => '토큰 정보가 누락되었습니다.'
+                    ],
+                ]));
+            }
+
+            $decodedToken = JWT::decode($accessToken, new key(TOKEN_KEY, 'HS256'));
+            $request->access_token = $decodedToken->access_token;
+        } catch (\Exception $e) {
+            return Services::response()
+                ->setStatusCode(ResponseInterface::HTTP_UNAUTHORIZED)
+                ->setHeader('Content-Type', 'application/json')
+                ->setBody(json_encode([
+                    "status" => 401,
+                    "error" => 401,
+                    'message' => [
+                        "error" => '토큰 정보가 유효하지 않습니다.'
+                    ],
+                ]));                
+        }
     }
 
     public function after(RequestInterface $request, ResponseInterface $response, $arguments = null) {
@@ -32,55 +81,6 @@ class AuthFilter implements FilterInterface {
 
     private function validateToken($token)
     {
-        $currentTime = time();
-        $tokenExpirationTime = $currentTime + 3600;
-        if ($currentTime <= $tokenExpirationTime) {
-            return true;
-        } else {
-            return false; //토큰 만료
-        }
+        return true;
     }
-
-    private function generateToken()
-    {
-        $client = \Config\Services::curlrequest();
-
-        $endpoint = '/oauth2/token';
-        $apiURL = EBEST_API_URL.$endpoint;
-
-        $request = array(
-            'grant_type' => 'client_credentials',
-            'appkey' => getenv('appkey'),
-            'appsecretkey' => getenv('appsecretkey'),
-            'scope' => 'oob',
-        );
-
-        try {
-            $response = $client->post($apiURL, [
-                'form_params' => $request,
-                'headers' => [
-                    'Content-Type: application/x-www-form-urlencoded',
-                ]
-            ]);
-
-            if ($response->getStatusCode() === 200) {
-                $body = $response->getBody();
-                $data = json_decode($body, true);
-
-                return [
-                    'accessToken' => $data['accessToken'], // 응답에서 accessToken 필드를 추출
-                    'expiresIn' => $data['expiresIn'], // 응답에서 expiresIn 필드를 추출
-                ];
-            }
-        } catch (\Exception $e) {
-            // 요청 실패 처리
-            log_message('error', 'Token generation failed: '.$e->getMessage());
-        }
-
-        return null;
-    }
-
-
-
-
 }
