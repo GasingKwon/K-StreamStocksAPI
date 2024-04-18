@@ -12,11 +12,6 @@ use CodeIgniter\API\ResponseTrait;
 class Api extends BaseController {
     use ResponseTrait;
 
-    public function test() {
-        echo 'hello!';
-        return;
-    }
-
     public function generateToken()
     {
         $endpoint = '/oauth2/token';
@@ -54,10 +49,7 @@ class Api extends BaseController {
         $resTokenInfo = json_decode($response, true);
         $accessToken = JWT::encode(['access_token' => $resTokenInfo['access_token']], getenv('jwtKey'), 'HS256');
 
-        return $this->response
-        ->setHeader('Authorization', "Bearer " . $accessToken)
-        ->setStatusCode(200)
-        ->setBody('Token issued');
+        return $accessToken;
     }
 
     public function restfulCurl($req, $endpoint) {

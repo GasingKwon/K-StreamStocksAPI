@@ -59,7 +59,7 @@ class AuthFilter implements FilterInterface {
                 ]));
             }
 
-            $decodedToken = JWT::decode($accessToken, new key(TOKEN_KEY, 'HS256'));
+            $decodedToken = JWT::decode($accessToken, new key(getenv('jwtKey'), 'HS256'));
             $request->access_token = $decodedToken->access_token;
         } catch (\Exception $e) {
             return Services::response()
